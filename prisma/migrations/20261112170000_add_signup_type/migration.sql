@@ -1,0 +1,4 @@
+CREATE TYPE "AccountType" AS ENUM ('VIEWER', 'CREATOR');
+
+ALTER TABLE "User"
+ADD COLUMN "signupType" "AccountType" NOT NULL DEFAULT 'VIEWER';
