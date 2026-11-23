@@ -32,11 +32,13 @@ export default function CreatorGuidelinesPage() {
             <li>No hate, exploitation, child sexual abuse material, or promotion of violence.</li>
             <li>No illegal material, scams, impersonation, spam, or deliberately misleading content.</li>
             <li>Only upload content you own or are legally authorized to publish.</li>
-            <li>Respect privacy, intellectual property, applicable laws, and other people's rights.</li>
+            <li>Respect privacy, intellectual property, applicable laws, and other people&apos;s rights.</li>
             <li>Do not evade moderation, suspensions, or account restrictions using another account.</li>
+            <li>Peaceful political opinions and debate are allowed. Hate, threats, intimidation, harassment, targeted abuse, incitement to violence, and deliberately deceptive political content presented as fact may be moderated.</li>
+            <li>Provide truthful account and profile information. Deliberate identity fraud or impersonation may result in account termination after evidence-based review. Names, email addresses, or assumptions about gender alone are not proof of fraud.</li>
           </ul>
           <p className="mt-5 border-t border-white/10 pt-4 text-xs text-slate-400">
-            Agreement version: VIEWERS_TUBE_CREATOR_2026_01
+            Agreement version: VIEWERS_TUBE_CREATOR_2026_02
           </p>
         </section>
 
@@ -55,8 +57,8 @@ export default function CreatorGuidelinesPage() {
           <p className="mt-4 text-sm leading-6 text-slate-400">
             You will receive a notice and may appeal a strike. Reports or
             automated detection alone do not establish a violation;
-            enforcement requires confirmation under the platform's
-            moderation process.
+            enforcement requires confirmation under the platform&apos;s
+            moderation process. Serious violations, deliberate identity fraud, or repeated abuse may result in account termination after review. You will receive notice of an enforcement decision and may appeal it.
           </p>
         </section>
 

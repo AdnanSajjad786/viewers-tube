@@ -10,12 +10,12 @@ export default function TermsPage() {
       </section>
       <section>
         <h2>2. Accounts</h2>
-        <p>You are responsible for providing accurate registration information, keeping your sign-in credentials confidential, and activity carried out through your account. Do not impersonate another person or misuse another user's account.</p>
+        <p>You are responsible for providing accurate registration information, keeping your sign-in credentials confidential, and activity carried out through your account. Do not impersonate another person or misuse another user&apos;s account.</p>
       </section>
       <section>
         <h2>3. Viewer and Creator responsibilities</h2>
         <p>Use the platform lawfully and respectfully. Do not use it for scams, spam, harassment, threats, impersonation, unlawful activity, or attempts to interfere with the platform or other users.</p>
-        <p>Creators must only publish content they own or are legally authorized to publish, and must respect privacy, intellectual property, applicable laws, and other people's rights.</p>
+        <p>Creators must only publish content they own or are legally authorized to publish, and must respect privacy, intellectual property, applicable laws, and other people&apos;s rights.</p>
       </section>
       <section>
         <h2>4. Prohibited content</h2>
@@ -24,7 +24,7 @@ export default function TermsPage() {
       <section>
         <h2>5. Moderation and Creator enforcement</h2>
         <p>Confirmed Creator Agreement violations may result in content removal and Creator upload suspensions: first strike 7 days, second strike 14 days, third strike 30 days, and a fourth strike may result in termination of Creator privileges. Creators will receive notice and may appeal a strike.</p>
-        <p>Reports or automated detection alone do not establish a violation. Enforcement requires confirmation under the platform's moderation process. Attempts to evade moderation or account restrictions through another account are prohibited.</p>
+        <p>Reports or automated detection alone do not establish a violation. Enforcement requires confirmation under the platform&apos;s moderation process. Attempts to evade moderation or account restrictions through another account are prohibited.</p>
         <p><a href="/creator-guidelines">Read the full Creator Guidelines and Creator Agreement.</a></p>
       </section>
       <section>

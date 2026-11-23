@@ -1,10 +1,14 @@
-import { createB2ClientFromCredentials } from "@/lib/b2-client";
+import { createB2Client, createB2ClientFromCredentials } from "@/lib/b2-client";
 import { NextRequest, NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { ListObjectsV2Command } from "@aws-sdk/client-s3";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { encryptStorageSecret } from "@/lib/storage-crypto";
+import {
+  sendCreatorStorageVerified,
+  sendAdminCreatorStorageVerified,
+} from "@/lib/email";
 
 
 const REGIONS = new Set([
@@ -24,12 +28,19 @@ async function currentAccount() {
     select: {
       id: true,
       role: true,
+      signupType: true,
+      creatorApplicationStatus: true,
       creatorSuspendedUntil: true,
       creatorTerminatedAt: true,
     },
   });
 
-  if (!user || !["ADMIN", "CREATOR"].includes(user.role)) return null;
+  const isPendingCreator =
+    user?.role === "VIEWER" &&
+    user.signupType === "CREATOR" &&
+    user.creatorApplicationStatus === "PENDING";
+
+  if (!user || (!["ADMIN", "CREATOR"].includes(user.role) && !isPendingCreator)) return null;
   if (user.role === "CREATOR" && user.creatorTerminatedAt) return null;
   if (
     user.role === "CREATOR" &&
@@ -47,7 +58,7 @@ export async function GET() {
       return NextResponse.json({ error: "Creator or admin access required." }, { status: 403 });
     }
 
-    const connections = await prisma.storageConnection.findMany({
+    const records = await prisma.storageConnection.findMany({
       where: { userId: user.id },
       orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
       select: {
@@ -61,15 +72,68 @@ export async function GET() {
         isDefault: true,
         verifiedAt: true,
         createdAt: true,
+        endpoint: true,
+        keyId: true,
+        encryptedApplicationKey: true,
       },
     });
+
+    const connections = await Promise.all(records.map(async (record) => {
+      let usedBytes: number | null = null;
+      let usageError = false;
+
+      if (record.status === "VERIFIED") {
+        const client = createB2Client(record);
+        try {
+          let total = 0;
+          let continuationToken: string | undefined;
+
+          do {
+            const result = await client.send(new ListObjectsV2Command({
+              Bucket: record.bucketName,
+              Prefix: record.prefix
+                ? `${record.prefix}/${user.id}/`
+                : `${user.id}/`,
+              MaxKeys: 1000,
+              ContinuationToken: continuationToken,
+            }));
+
+            for (const object of result.Contents ?? []) {
+              total += object.Size ?? 0;
+            }
+
+            continuationToken = result.IsTruncated
+              ? result.NextContinuationToken
+              : undefined;
+          } while (continuationToken);
+
+          usedBytes = total;
+        } catch {
+          usageError = true;
+        } finally {
+          client.destroy();
+        }
+      }
+
+      const {
+        endpoint,
+        keyId,
+        encryptedApplicationKey,
+        ...safeRecord
+      } = record;
+      void endpoint;
+      void keyId;
+      void encryptedApplicationKey;
+
+      return { ...safeRecord, usedBytes, usageError };
+    }));
 
     return NextResponse.json({
       connections,
       connection: connections[0] ?? null,
     });
   } catch {
-    return NextResponse.json({ error: "Unable to load storage connection." }, { status: 500 });
+    return NextResponse.json({ error: "Unable to load storage connections." }, { status: 500 });
   }
 }
 
@@ -157,38 +221,106 @@ export async function POST(request: NextRequest) {
     });
     const makeDefault = data.isDefault === true || existingCount === 0;
 
-    if (makeDefault) {
-      await prisma.storageConnection.updateMany({
-        where: { userId: user.id },
-        data: { isDefault: false },
-      });
-    }
+    const connection = await prisma.$transaction(async (tx) => {
+      if (makeDefault) {
+        await tx.storageConnection.updateMany({
+          where: { userId: user.id },
+          data: { isDefault: false },
+        });
+      }
 
-    const connection = await prisma.storageConnection.create({
-      data: {
-        userId: user.id,
-        label: label || bucketName,
-        region,
-        bucketName,
-        endpoint,
-        keyId,
-        encryptedApplicationKey,
-        prefix,
-        isDefault: makeDefault,
-        status: "VERIFIED",
-        verifiedAt: new Date(),
-      },
-      select: {
-        id: true,
-        label: true,
-        region: true,
-        bucketName: true,
-        prefix: true,
-        status: true,
-        isDefault: true,
-        verifiedAt: true,
-      },
+      return tx.storageConnection.create({
+        data: {
+          userId: user.id,
+          label: label || bucketName,
+          region,
+          bucketName,
+          endpoint,
+          keyId,
+          encryptedApplicationKey,
+          prefix,
+          isDefault: makeDefault,
+          status: "VERIFIED",
+          verifiedAt: new Date(),
+        },
+        select: {
+          id: true,
+          label: true,
+          region: true,
+          bucketName: true,
+          prefix: true,
+          status: true,
+          isDefault: true,
+          verifiedAt: true,
+        },
+      });
     });
+
+    if (
+      user.role === "VIEWER" &&
+      user.signupType === "CREATOR" &&
+      user.creatorApplicationStatus === "PENDING"
+    ) {
+      try {
+        const applicant = await prisma.user.findUnique({
+          where: { id: user.id },
+          select: {
+            id: true, email: true, displayName: true,
+            firstName: true, lastName: true, username: true,
+          },
+        });
+
+        if (applicant) {
+          const notificationClaimedAt = new Date();
+const claimed = await prisma.user.updateMany({
+            where: {
+              id: applicant.id,
+              role: "VIEWER",
+              signupType: "CREATOR",
+              creatorApplicationStatus: "PENDING",
+              creatorStorageVerifiedNotifiedAt: null,
+            },
+            data: { creatorStorageVerifiedNotifiedAt: notificationClaimedAt },
+          });
+
+          if (claimed.count === 1) {
+            const creatorName =
+              [applicant.firstName, applicant.lastName].filter(Boolean).join(" ") ||
+              applicant.displayName;
+            const admins = await prisma.user.findMany({
+              where: { role: "ADMIN", emailVerified: true },
+              select: { email: true },
+            });
+            const results = await Promise.allSettled([
+              sendCreatorStorageVerified(applicant.email, creatorName),
+              ...admins.map((admin) =>
+                sendAdminCreatorStorageVerified(admin.email, {
+                  displayName: creatorName,
+                  username: applicant.username,
+                  email: applicant.email,
+                  bucketName: connection.bucketName,
+                  region: connection.region,
+                  verifiedAt: connection.verifiedAt || new Date(),
+                })
+              ),
+            ]);
+          if (results.some((result) => result.status === "rejected")) {
+            console.error("Creator notification delivery failed; allowing retry.", results.filter((result) => result.status === "rejected"));
+            await prisma.user.updateMany({
+              where: { id: applicant.id, creatorStorageVerifiedNotifiedAt: notificationClaimedAt },
+              data: { creatorStorageVerifiedNotifiedAt: null },
+            });
+          }
+            const failures = results.filter((result) => result.status === "rejected").length;
+            if (failures) {
+              console.error(`Creator B2 verification notification failures: ${failures}`);
+            }
+          }
+        }
+      } catch (notificationError) {
+        console.error("Creator B2 verification notification failed:", notificationError);
+      }
+    }
 
     return NextResponse.json({
       success: true,

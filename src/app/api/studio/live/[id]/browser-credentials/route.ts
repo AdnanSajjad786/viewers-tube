@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { isEligibleStudioUserById } from "@/lib/creator-access";
 import { prisma } from "@/lib/prisma";
 import { createStreamSecret } from "@/lib/live-stream-auth";
 import { checkRateLimit } from "@/lib/api-protection";
@@ -27,6 +28,9 @@ export async function POST(request: Request, context: Context) {
     }
 
     const session = await auth.api.getSession({ headers: await headers() });
+    if (session?.user?.id && !(await isEligibleStudioUserById(session.user.id))) {
+      return NextResponse.json({ error: "Creator account is not eligible." }, { status: 403 });
+    }
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Sign in required." }, { status: 401 });

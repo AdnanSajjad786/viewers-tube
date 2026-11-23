@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
-const AGREEMENT_VERSION = "VIEWERS_TUBE_CREATOR_2026_01";
+const AGREEMENT_VERSION = "VIEWERS_TUBE_CREATOR_2026_02";
 
 type Strike = {
   id: string;
@@ -21,6 +21,11 @@ export function CreatorAccountActions({
 }) {
   const router = useRouter();
   const [accepted, setAccepted] = useState(false);
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [gender, setGender] = useState("");
+  const [country, setCountry] = useState("");
   const [messages, setMessages] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
@@ -35,11 +40,16 @@ export function CreatorAccountActions({
         body: JSON.stringify({
           acceptedAgreement: accepted,
           agreementVersion: AGREEMENT_VERSION,
+          firstName,
+          lastName,
+          dateOfBirth,
+          gender,
+          country,
         }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Upgrade failed.");
-      setNotice("Your account is now a Creator. Your channel has been created.");
+      setNotice("Your Creator application has been submitted. It is awaiting Admin review.");
       router.refresh();
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Upgrade failed.");
@@ -79,8 +89,31 @@ export function CreatorAccountActions({
       <section className="mt-7 rounded-xl border border-cyan-400/30 bg-cyan-400/5 p-5">
         <h2 className="text-xl font-bold text-cyan-200">Become a Creator</h2>
         <p className="mt-2 text-sm text-slate-300">
-          Upgrade this account and create your channel. You will keep the same login.
+          Apply to become a Creator. Your account remains a Viewer until an Admin approves your application.
         </p>
+        <div className="mt-4 grid gap-3 sm:grid-cols-2">
+          <label className="text-sm text-slate-300">First name
+            <input required value={firstName} onChange={(e) => setFirstName(e.target.value)} autoComplete="given-name" className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-white" />
+          </label>
+          <label className="text-sm text-slate-300">Last name
+            <input required value={lastName} onChange={(e) => setLastName(e.target.value)} autoComplete="family-name" className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-white" />
+          </label>
+          <label className="text-sm text-slate-300">Date of birth
+            <input required type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-white" />
+          </label>
+          <label className="text-sm text-slate-300">Gender
+            <select required value={gender} onChange={(e) => setGender(e.target.value)} className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-white">
+              <option value="">Select gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+              <option value="Prefer not to say">Prefer not to say</option>
+            </select>
+          </label>
+          <label className="text-sm text-slate-300 sm:col-span-2">Country
+            <input required value={country} onChange={(e) => setCountry(e.target.value)} autoComplete="country-name" placeholder="Enter your country" className="mt-1 w-full rounded-lg border border-white/15 bg-slate-950 p-3 text-white" />
+          </label>
+        </div>
         <label className="mt-4 flex items-start gap-3 text-sm text-slate-300">
           <input
             type="checkbox"
@@ -97,10 +130,10 @@ export function CreatorAccountActions({
         <button
           type="button"
           onClick={upgrade}
-          disabled={!accepted || busy !== null}
+          disabled={!accepted || !firstName.trim() || !lastName.trim() || !dateOfBirth || !gender || !country.trim() || busy !== null}
           className="mt-4 rounded-xl bg-cyan-400 px-5 py-3 text-sm font-semibold text-slate-950 disabled:opacity-50"
         >
-          {busy === "upgrade" ? "Upgrading…" : "Upgrade to Creator"}
+          {busy === "upgrade" ? "Submitting…" : "Submit Creator application"}
         </button>
         {notice && <p role="status" className="mt-3 text-sm text-cyan-200">{notice}</p>}
       </section>

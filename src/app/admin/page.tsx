@@ -5,7 +5,6 @@ import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { getAdminOverview } from "@/lib/admin-overview";
 
-export const instant = false;
 
 
 function StatCard({ label, value }: { label: string; value: number }) {
@@ -59,6 +58,18 @@ export default async function AdminDashboardPage() {
             ADMIN
           </span>
         </header>
+
+        <section className="mt-6">
+          <Link href="/admin/creators" className="inline-flex rounded-lg bg-emerald-400 px-4 py-3 font-semibold text-slate-950">
+            Review Creator applications
+          </Link>
+        </section>
+
+        <section className="mt-5">
+          <Link href="/repair-centre" className="inline-flex rounded-lg border border-cyan-300/30 px-4 py-3 font-semibold text-cyan-200 hover:bg-cyan-300/10">
+            Open Repair Centre
+          </Link>
+        </section>
 
         <section className="mt-9">
           <h2 className="mb-4 text-lg font-semibold">Platform overview</h2>

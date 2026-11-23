@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
+import { isEligibleStudioUserById } from "@/lib/creator-access";
 import { prisma } from "@/lib/prisma";
 
 export async function DELETE(
@@ -8,6 +9,9 @@ export async function DELETE(
 ) {
   try {
     const session = await auth.api.getSession({ headers: request.headers });
+    if (session?.user?.id && !(await isEligibleStudioUserById(session.user.id))) {
+      return NextResponse.json({ error: "Creator account is not eligible." }, { status: 403 });
+    }
 
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });

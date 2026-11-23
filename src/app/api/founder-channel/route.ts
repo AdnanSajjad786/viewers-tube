@@ -4,6 +4,24 @@ import { checkRateLimit, getApiCache, setApiCache } from "@/lib/api-protection";
 const HANDLE = "@adnansajjad786";
 const CHANNEL_URL = "https://www.youtube.com/@adnansajjad786";
 
+type YouTubePlaylistItem = {
+  contentDetails?: {
+    videoId?: string;
+    videoPublishedAt?: string;
+  };
+  snippet?: {
+    title?: string;
+    description?: string;
+    publishedAt?: string;
+    resourceId?: { videoId?: string };
+    thumbnails?: {
+      high?: { url?: string };
+      medium?: { url?: string };
+      default?: { url?: string };
+    };
+  };
+};
+
 type FounderResponse = {
   channel: {
     title: string;
@@ -88,7 +106,10 @@ export async function GET(request: NextRequest) {
       cache: "no-store",
       signal: AbortSignal.timeout(15000),
     });
-    const playlistData = await playlistResponse.json();
+    const playlistData = (await playlistResponse.json()) as {
+      items?: YouTubePlaylistItem[];
+      error?: { message?: string };
+    };
 
     if (!playlistResponse.ok) {
       throw new Error(
@@ -104,7 +125,7 @@ export async function GET(request: NextRequest) {
       "";
 
     const items = (playlistData.items || [])
-      .map((item: any) => {
+      .map((item) => {
         const id =
           item.contentDetails?.videoId ||
           item.snippet?.resourceId?.videoId;
@@ -129,7 +150,7 @@ export async function GET(request: NextRequest) {
           provider: "YouTube",
         };
       })
-      .filter(Boolean);
+      .filter((item): item is FounderResponse["items"][number] => item !== null);
 
     const result: FounderResponse = {
       channel: {

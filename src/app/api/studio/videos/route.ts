@@ -1,12 +1,18 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { auth } from "@/lib/auth";
+import { isEligibleStudioUserById } from "@/lib/creator-access";
 import { prisma } from "@/lib/prisma";
 
 
 export async function GET() {
+  const requestHeaders = await headers();
+
   try {
-    const session = await auth.api.getSession({ headers: await headers() });
+    const session = await auth.api.getSession({ headers: requestHeaders });
+    if (session?.user?.id && !(await isEligibleStudioUserById(session.user.id))) {
+      return NextResponse.json({ error: "Creator account is not eligible." }, { status: 403 });
+    }
     if (!session?.user?.id) {
       return NextResponse.json({ error: "Sign in required." }, { status: 401 });
     }

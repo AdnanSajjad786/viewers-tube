@@ -2,8 +2,11 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { VideoUploadForm } from "../account/video-upload-form";
 import { StudioLivePanel } from "./studio-live-panel";
+import { StudioPodcastsPanel } from "./studio-podcasts-panel";
+import { StudioPromotionsPanel } from "./studio-promotions-panel";
 
 type VideoItem = {
   id: string;
@@ -53,6 +56,7 @@ export function StudioDashboard({ role, displayName }: { role: string; displayNa
     }
   }, []);
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect -- Intentional initial data fetch on mount.
   useEffect(() => { void load(); }, [load]);
 
   const filtered = useMemo(() => videos.filter((video) => {
@@ -111,6 +115,7 @@ export function StudioDashboard({ role, displayName }: { role: string; displayNa
           <nav className="flex flex-wrap gap-2 text-sm">
             <Link href="/" className="rounded-lg border border-white/15 px-3 py-2 hover:bg-white/10">Explore</Link>
             <Link href="/account" className="rounded-lg border border-white/15 px-3 py-2 hover:bg-white/10">Account</Link>
+            <Link href="/repair-centre" className="rounded-lg border border-cyan-300/30 px-3 py-2 text-cyan-200 hover:bg-cyan-300/10">Repair Centre</Link>
             {role === "ADMIN" && <Link href="/admin" className="rounded-lg border border-white/15 px-3 py-2 hover:bg-white/10">Admin dashboard</Link>}
           </nav>
         </header>
@@ -193,7 +198,7 @@ export function StudioDashboard({ role, displayName }: { role: string; displayNa
                         <td className="max-w-[430px] px-4 py-3">
                           <button onClick={() => setExpanded(expanded === video.id ? null : video.id)} className="flex w-full items-start gap-3 text-left">
                             <div className="relative h-[68px] w-[120px] shrink-0 overflow-hidden rounded-md bg-slate-800">
-                              {video.thumbnailUrl && <img src={video.thumbnailUrl} alt="" className="h-full w-full object-cover" />}
+                              {video.thumbnailUrl && <Image src={video.thumbnailUrl} alt="" width={120} height={68} unoptimized className="h-full w-full object-cover" />}
                               {!video.thumbnailUrl && <div className="flex h-full items-center justify-center text-xs text-slate-500">No thumbnail</div>}
                             </div>
                             <div className="min-w-0">
@@ -274,7 +279,7 @@ export function StudioDashboard({ role, displayName }: { role: string; displayNa
                 </form>
               </div>;
             })()}
-          </> : tab === "Live" ? <StudioLivePanel /> : <div className="p-10 text-center">
+          </> : tab === "Live" ? <StudioLivePanel /> : tab === "Podcasts" ? <StudioPodcastsPanel /> : tab === "Promotions" ? <StudioPromotionsPanel role={role} /> : <div className="p-10 text-center">
             <p className="font-semibold">{tab}</p>
             <p className="mt-2 text-sm text-slate-400">This content type is not yet supported by the current platform database. No sample entries are displayed.</p>
           </div>}

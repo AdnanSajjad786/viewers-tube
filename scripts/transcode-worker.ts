@@ -3,11 +3,11 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { createB2Client } from "../src/lib/b2-client";
-import { prisma } from "../src/lib/prisma";
+import { prisma } from "./worker-prisma";
 import { spawn, execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createReadStream, createWriteStream } from "node:fs";
-import { mkdtemp, readdir, readFile, rm, stat } from "node:fs/promises";
+import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pipeline } from "node:stream/promises";
@@ -305,6 +305,93 @@ async function processNextJob(): Promise<boolean> {
   return true;
 }
 
+
+// Podcast video thumbnails are processed separately from Video transcoding.
+const failedPodcastThumbnailIds = new Set<string>();
+
+async function processNextPodcastThumbnail(): Promise<boolean> {
+  const candidates = await prisma.podcastEpisode.findMany({
+    where: {
+      status: { in: ["READY", "PUBLISHED"] },
+      contentType: { startsWith: "video/" },
+      thumbnailUrl: null,
+      storageConnection: { status: "VERIFIED" },
+    },
+    orderBy: { createdAt: "asc" },
+    take: 20,
+    include: { storageConnection: true },
+  });
+
+  const episode = candidates.find(
+    (item) => !failedPodcastThumbnailIds.has(item.id)
+  );
+
+  if (!episode) return false;
+
+  let client: ReturnType<typeof createB2Client> | undefined;
+  let workDir: string | undefined;
+
+  try {
+    const connection = episode.storageConnection;
+    client = createB2Client(connection);
+    workDir = await mkdtemp(join(tmpdir(), "viewerstube-podcast-"));
+
+    console.log(`[Podcast ${episode.id}] Downloading source for thumbnail`);
+
+    const sourcePath = join(workDir, "source");
+    const source = await client.send(new GetObjectCommand({
+      Bucket: connection.bucketName,
+      Key: episode.storageKey,
+    }));
+
+    if (!source.Body) throw new Error("B2 returned an empty podcast video.");
+
+    await pipeline(
+      source.Body as Readable,
+      createWriteStream(sourcePath)
+    );
+
+    const thumbnailPath = join(workDir, "thumbnail.jpg");
+
+    await runFfmpeg([
+      "-hide_banner", "-loglevel", "error", "-y",
+      "-ss", "1", "-i", sourcePath,
+      "-frames:v", "1",
+      "-vf", "scale=640:-2",
+      "-q:v", "3",
+      thumbnailPath,
+    ]);
+
+    const thumbnailKey = `${episode.storageKey}.hls/thumbnail.jpg`;
+    const thumbnailStat = await stat(thumbnailPath);
+
+    await client.send(new PutObjectCommand({
+      Bucket: connection.bucketName,
+      Key: thumbnailKey,
+      Body: createReadStream(thumbnailPath),
+      ContentLength: thumbnailStat.size,
+      ContentType: "image/jpeg",
+    }));
+
+    await prisma.podcastEpisode.update({
+      where: { id: episode.id },
+      data: {
+        thumbnailUrl: `/api/podcasts/episodes/${encodeURIComponent(episode.id)}/thumbnail`,
+      },
+    });
+
+    console.log(`[Podcast ${episode.id}] Thumbnail generated.`);
+  } catch (error) {
+    failedPodcastThumbnailIds.add(episode.id);
+    console.error(`[Podcast ${episode.id}] Thumbnail generation failed:`, error);
+  } finally {
+    client?.destroy();
+    if (workDir) await rm(workDir, { recursive: true, force: true });
+  }
+
+  return true;
+}
+
 async function publishDueVideos() {
   const now = new Date();
   const due = await prisma.video.findMany({
@@ -343,16 +430,90 @@ async function main() {
   process.once("SIGINT", () => { stopping = true; });
   process.once("SIGTERM", () => { stopping = true; });
 
+  const writeHeartbeat = async () => {
+    try {
+      const now = new Date();
+      await prisma.workerHeartbeat.upsert({
+        where: { id: "transcode-worker" },
+        create: { id: "transcode-worker", lastSeenAt: now },
+        update: { lastSeenAt: now },
+      });
+    } catch {
+      console.error("[worker] Heartbeat update failed.");
+    }
+  };
+
+  // Recover abandoned jobs periodically, including after worker restarts.
+  let lastStaleJobRecoveryAt = 0;
+  const recoverAbandonedJobs = async () => {
+    lastStaleJobRecoveryAt = Date.now();
+    try {
+      const staleBefore = new Date(Date.now() - 24 * 60 * 60 * 1000);
+      const recovered = await prisma.transcodeJob.updateMany({
+        where: {
+          status: "RUNNING",
+          updatedAt: { lt: staleBefore },
+          video: { is: { status: "PROCESSING" } },
+        },
+        data: {
+          status: "PENDING",
+          error: "Automatically requeued after worker interruption.",
+        },
+      });
+      if (recovered.count > 0) {
+        console.warn(`[worker] Requeued ${recovered.count} abandoned job(s).`);
+      }
+    } catch (error) {
+      console.error("[worker] Abandoned-job recovery failed:", error);
+    }
+  };
+
+  await recoverAbandonedJobs();
+  await writeHeartbeat();
+  const heartbeatTimer = setInterval(() => {
+    void writeHeartbeat();
+  }, 15_000);
+
+  let consecutiveLoopErrors = 0;
+
   try {
     while (!stopping) {
-      await publishDueVideos();
-      const found = await processNextJob();
+      try {
+        if (Date.now() - lastStaleJobRecoveryAt >= 5 * 60 * 1000) {
+          await recoverAbandonedJobs();
+        }
 
-      if (!found && !stopping) {
-        await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+        await publishDueVideos();
+        const foundVideoJob = await processNextJob();
+        const foundPodcastThumbnail = foundVideoJob
+          ? false
+          : await processNextPodcastThumbnail();
+
+        consecutiveLoopErrors = 0;
+
+        if (!foundVideoJob && !foundPodcastThumbnail && !stopping) {
+          await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+        }
+      } catch (error) {
+        consecutiveLoopErrors += 1;
+        const delay = Math.min(
+          120_000,
+          POLL_MS * 2 ** Math.min(consecutiveLoopErrors, 6)
+        );
+
+        console.error(
+          `[worker] Main loop failed (attempt ${consecutiveLoopErrors}). ` +
+          `Retrying in ${Math.round(delay / 1000)} seconds:`,
+          error
+        );
+
+        if (!stopping) {
+          await new Promise((resolve) => setTimeout(resolve, delay));
+        }
       }
     }
   } finally {
+    clearInterval(heartbeatTimer);
     await prisma.$disconnect();
     console.log("Transcoding worker stopped.");
   }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 const categories = ["Music","Education","Entertainment","Gaming","News","Sports","Technology","Science","Travel","Lifestyle","Comedy","Film & Animation","People & Blogs","How-to & Style","Autos & Vehicles","Nonprofits & Activism"];
 
@@ -15,13 +15,9 @@ export function VideoUploadForm() {
   const [file, setFile] = useState<File | null>(null);
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
-  const [scheduleMin, setScheduleMin] = useState("");
-
-  useEffect(() => {
-    setScheduleMin(
-      new Date(Date.now() + 60000).toISOString().slice(0, 16)
-    );
-  }, []);
+  const [scheduleMin] = useState(
+    () => new Date(Date.now() + 60000).toISOString().slice(0, 16)
+  );
 
   async function upload(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault();

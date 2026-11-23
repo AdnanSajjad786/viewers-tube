@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import { ClientErrorReporter } from "@/app/repair-centre/client-error-reporter";
 
 export const metadata: Metadata = {
   title: "Viewers Tube — Watch · Create · Share",
@@ -9,7 +10,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><ClientErrorReporter />{children}</body>
     </html>
   );
 }

@@ -1,4 +1,3 @@
-import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyStreamSecret } from "@/lib/live-stream-auth";
 

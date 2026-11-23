@@ -3,7 +3,7 @@ import SiteInfoPage from "@/components/SiteInfoPage";
 export default function PrivacyPage() {
   return (
     <SiteInfoPage title="Privacy Policy" subtitle="Effective date: November 12, 2026">
-      <p>This Privacy Policy explains how Viewers Tube may collect, use, and protect information when you visit or use the platform. It describes the platform's current intended practices and may be updated as features and services develop.</p>
+      <p>This Privacy Policy explains how Viewers Tube may collect, use, and protect information when you visit or use the platform. It describes the platform&apos;s current intended practices and may be updated as features and services develop.</p>
       <section>
         <h2>1. Information we may collect</h2>
         <ul>
@@ -24,7 +24,7 @@ export default function PrivacyPage() {
       </section>
       <section>
         <h2>4. Video links and third-party services</h2>
-        <p>Viewers Tube may display or link to videos and services operated by other platforms. When you follow an external link or use a third-party service, that provider's own privacy policy and practices apply. We do not control those providers.</p>
+        <p>Viewers Tube may display or link to videos and services operated by other platforms. When you follow an external link or use a third-party service, that provider&apos;s own privacy policy and practices apply. We do not control those providers.</p>
       </section>
       <section>
         <h2>5. Sharing and service providers</h2>

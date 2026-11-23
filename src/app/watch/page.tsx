@@ -2,7 +2,6 @@ import Link from "next/link";
 import { prisma } from "@/lib/prisma";
 import { NativeVideoPlayer } from "./native-video-player";
 
-export const instant = false;
 
 type SearchParams = {
   provider?: string;

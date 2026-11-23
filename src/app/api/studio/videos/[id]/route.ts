@@ -5,6 +5,7 @@ import {
   ListObjectsV2Command,
 } from "@aws-sdk/client-s3";
 import { auth } from "@/lib/auth";
+import { isEligibleStudioUserById } from "@/lib/creator-access";
 import { prisma } from "@/lib/prisma";
 import { createB2Client } from "@/lib/b2-client";
 
@@ -14,6 +15,10 @@ async function authorizedVideo(id: string) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) {
     return { response: NextResponse.json({ error: "Sign in required." }, { status: 401 }) };
+  }
+
+  if (!(await isEligibleStudioUserById(session.user.id))) {
+    return { response: NextResponse.json({ error: "Creator account is not eligible." }, { status: 403 }) };
   }
 
   const user = await prisma.user.findUnique({

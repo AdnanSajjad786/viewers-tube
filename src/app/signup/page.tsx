@@ -1,4 +1,5 @@
 "use client";
+import { MemberPageHeader, MemberPageFooter } from "@/components/member-page-chrome";
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -8,11 +9,17 @@ import { authClient } from "@/lib/auth-client";
 export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [gender, setGender] = useState("");
+  const [country, setCountry] = useState("");
   const [username, setUsername] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [signupType, setSignupType] = useState<"VIEWER" | "CREATOR">("VIEWER");
   const [creatorAgreementAccepted, setCreatorAgreementAccepted] = useState(false);
+  const [showCreatorAgreement, setShowCreatorAgreement] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -29,6 +36,11 @@ export default function SignupPage() {
       setError("Use a password with at least 8 characters.");
       return;
     }
+    if (signupType === "CREATOR" &&
+        (!firstName.trim() || !lastName.trim() || !dateOfBirth || !gender || !country.trim())) {
+      setError("Complete your first name, surname, date of birth, gender and country.");
+      return;
+    }
     if (signupType === "CREATOR" && !creatorAgreementAccepted) {
       setError("You must accept the Creator Agreement before registering as a Creator.");
       return;
@@ -37,13 +49,22 @@ export default function SignupPage() {
     setBusy(true);
     try {
       const result = await authClient.signUp.email({
-        name: name.trim(),
+        name: signupType === "CREATOR"
+          ? `${firstName.trim()} ${lastName.trim()}`
+          : name.trim(),
         username: cleanUsername,
         email: email.trim(),
         password,
         signupType,
         ...(signupType === "CREATOR"
-          ? { creatorAgreementVersion: "VIEWERS_TUBE_CREATOR_2026_01" }
+          ? {
+              creatorAgreementVersion: "VIEWERS_TUBE_CREATOR_2026_02",
+              firstName: firstName.trim(),
+              lastName: lastName.trim(),
+              dateOfBirth,
+              gender,
+              country: country.trim(),
+            }
           : {}),
         callbackURL: "/account",
       });
@@ -62,7 +83,9 @@ export default function SignupPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#080b13] px-5 py-12 text-white">
+    <>
+      <MemberPageHeader variant="auth" />
+<main className="min-h-screen bg-[#080b13] px-5 py-12 text-white">
       <div className="mx-auto max-w-md">
         <Link href="/" className="text-sm text-cyan-300 hover:text-cyan-200">
           ← Viewers Tube
@@ -98,14 +121,67 @@ export default function SignupPage() {
                 </label>
               </div>
             </div>
-            <label className="block text-sm">
-              Display name
-              <input required minLength={2} maxLength={60} value={name}
-                onChange={(e) => setName(e.target.value)}
-                autoComplete="name"
-                className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none focus:border-cyan-400"
-                placeholder="Your name" />
-            </label>
+            {signupType === "VIEWER" ? (
+              <label className="block text-sm">
+                Display name
+                <input required minLength={2} maxLength={60} value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  autoComplete="name"
+                  className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-4 py-3 outline-none focus:border-cyan-400"
+                  placeholder="Your name" />
+              </label>
+            ) : (
+              <section className="space-y-3 rounded-xl border border-white/10 bg-black/20 p-4">
+                <h2 className="text-sm font-semibold text-cyan-200">Creator profile</h2>
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <label className="block text-sm">
+                    First name
+                    <input required maxLength={60} value={firstName}
+                      onChange={(e) => setFirstName(e.target.value)}
+                      autoComplete="given-name"
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 outline-none focus:border-cyan-400"
+                      placeholder="First name" />
+                  </label>
+                  <label className="block text-sm">
+                    Surname
+                    <input required maxLength={60} value={lastName}
+                      onChange={(e) => setLastName(e.target.value)}
+                      autoComplete="family-name"
+                      className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 outline-none focus:border-cyan-400"
+                      placeholder="Last name" />
+                  </label>
+                </div>
+                <label className="block text-sm">
+                  Date of birth
+                  <input required type="date" value={dateOfBirth}
+                    onChange={(e) => setDateOfBirth(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 outline-none focus:border-cyan-400" />
+                  <span className="mt-1 block text-xs text-slate-400">Required for profile records. No minimum-age cutoff is applied by this form.</span>
+                </label>
+                <label className="block text-sm">
+                  Gender
+                  <select required value={gender} onChange={(e) => setGender(e.target.value)}
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-[#111827] px-3 py-3 outline-none focus:border-cyan-400">
+                    <option value="">Choose an option</option>
+                    <option value="Male">Male</option>
+                    <option value="Female">Female</option>
+                    <option value="Other">Other</option>
+                    <option value="Prefer not to say">Prefer not to say</option>
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  Country
+                  <input required list="creator-country-options" value={country}
+                    onChange={(e) => setCountry(e.target.value)}
+                    autoComplete="country-name"
+                    className="mt-2 w-full rounded-xl border border-white/10 bg-black/30 px-3 py-3 outline-none focus:border-cyan-400"
+                    placeholder="Type to search your country" />
+                  <datalist id="creator-country-options">
+                    {["Afghanistan","Argentina","Australia","Austria","Bangladesh","Belgium","Brazil","Canada","China","Denmark","Egypt","France","Germany","India","Indonesia","Iran","Iraq","Ireland","Italy","Japan","Kenya","Malaysia","Nepal","Netherlands","New Zealand","Nigeria","Pakistan","Philippines","Qatar","Saudi Arabia","Singapore","South Africa","South Korea","Spain","Sri Lanka","Sweden","Switzerland","Turkey","United Arab Emirates","United Kingdom","United States"].map((item) => <option key={item} value={item} />)}
+                  </datalist>
+                </label>
+              </section>
+            )}
             <label className="block text-sm">
               Username
               <input required minLength={3} maxLength={24} value={username}
@@ -132,45 +208,69 @@ export default function SignupPage() {
             </label>
 
             {signupType === "CREATOR" && (
-              <section className="space-y-3 rounded-xl border border-cyan-400/30 bg-cyan-400/5 p-4">
-                <h2 className="font-semibold text-cyan-200">Viewers Tube Creator Agreement</h2>
-                <a href="/creator-guidelines" target="_blank" rel="noopener noreferrer" className="inline-block text-sm font-medium text-cyan-300 underline hover:text-cyan-200">
-                  Read full Creator Guidelines ↗
-                </a>
-                <p className="text-xs leading-5 text-slate-300">
-                  By registering as a Creator, you agree to follow these rules:
-                </p>
-                <ul className="list-disc space-y-2 pl-5 text-xs leading-5 text-slate-300">
-                  <li>No nudity, pornography, or sexually explicit material.</li>
-                  <li>No obscene, excessively profane, abusive, threatening, or harassing content.</li>
-                  <li>No hate, exploitation, child sexual abuse material, or promotion of violence.</li>
-                  <li>No illegal material, scams, impersonation, spam, or deliberately misleading content.</li>
-                  <li>Only upload content you own or are legally authorized to publish.</li>
-                  <li>Respect privacy, intellectual property, applicable laws, and other people's rights.</li>
-                  <li>Do not evade moderation, suspensions, or account restrictions using another account.</li>
-                </ul>
-                <p className="text-xs leading-5 text-slate-400">
-                  Confirmed violations can result in video removal and Creator upload suspensions:
-                  first strike 7 days, second 14 days, third 30 days, and fourth strike termination
-                  of Creator privileges. You will receive a notice and may appeal a strike.
-                  Reports or automated detection alone do not establish a violation; enforcement
-                  requires confirmation under the platform's moderation process.
-                </p>
-                <label className="flex cursor-pointer items-start gap-3 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={creatorAgreementAccepted}
+              <section className="rounded-xl border border-cyan-400/30 bg-cyan-400/5 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <h2 className="font-semibold text-cyan-200">Creator Agreement</h2>
+                    <p className="mt-1 text-xs text-slate-400">Review the publishing rules before applying.</p>
+                  </div>
+                  <button type="button" onClick={() => setShowCreatorAgreement(true)}
+                    className="rounded-lg border border-cyan-300/40 px-3 py-2 text-xs font-semibold text-cyan-200 hover:bg-cyan-300/10">
+                    Review agreement
+                  </button>
+                </div>
+                <label className="mt-4 flex cursor-pointer items-start gap-3 text-sm">
+                  <input type="checkbox" checked={creatorAgreementAccepted}
                     onChange={(event) => setCreatorAgreementAccepted(event.target.checked)}
-                    className="mt-1 accent-cyan-400"
-                  />
+                    className="mt-1 accent-cyan-400" />
                   <span>
                     I have read and agree to the Viewers Tube Creator Agreement.
-                    <span className="mt-1 block text-xs text-slate-400">
-                      Agreement version: VIEWERS_TUBE_CREATOR_2026_01
-                    </span>
+                    <span className="mt-1 block text-xs text-slate-400">Required · Version: VIEWERS_TUBE_CREATOR_2026_02</span>
                   </span>
                 </label>
+                {!creatorAgreementAccepted && <p className="mt-2 text-xs text-amber-200">Acceptance is required before submitting your Creator application.</p>}
               </section>
+            )}
+
+            {showCreatorAgreement && signupType === "CREATOR" && (
+              <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/80 p-4"
+                onClick={(event) => { if (event.target === event.currentTarget) setShowCreatorAgreement(false); }}>
+                <section role="dialog" aria-modal="true" aria-labelledby="creator-agreement-title"
+                  className="max-h-[85vh] w-full max-w-2xl overflow-y-auto rounded-2xl border border-cyan-400/30 bg-[#101827] p-5 text-white shadow-2xl sm:p-7">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <h2 id="creator-agreement-title" className="text-xl font-bold text-cyan-200">Viewers Tube Creator Agreement</h2>
+                      <p className="mt-1 text-xs text-slate-400">Version: VIEWERS_TUBE_CREATOR_2026_02</p>
+                    </div>
+                    <button type="button" onClick={() => setShowCreatorAgreement(false)}
+                      className="rounded-lg border border-white/15 px-3 py-1 text-slate-300">Close</button>
+                  </div>
+                  <div className="mt-5 space-y-4 text-sm leading-6 text-slate-300">
+                    <p>By applying as a Creator, you agree to follow these rules and applicable laws:</p>
+                    <ul className="list-disc space-y-2 pl-5">
+                      <li>No nudity, pornography, or sexually explicit material.</li>
+                      <li>No obscene, excessively profane, abusive, threatening, or harassing content.</li>
+                      <li>No hate, exploitation, child sexual abuse material, or promotion of violence.</li>
+                      <li>No illegal material, scams, spam, deliberate impersonation, or deliberately misleading content.</li>
+                      <li>Only publish content you own or are legally authorized to use. Respect privacy, intellectual property, and other people&apos;s rights.</li>
+                      <li>Do not evade moderation, suspensions, or account restrictions using another account.</li>
+                      <li>Peaceful political opinions and debate are allowed. Hate, threats, intimidation, harassment, targeted abuse, incitement to violence, and deliberately deceptive political content presented as fact may be moderated.</li>
+                      <li>Provide truthful account and profile information. Deliberate identity fraud or impersonation may result in termination after evidence-based review. Names, email addresses, or assumptions about gender alone are not proof of fraud.</li>
+                    </ul>
+                    <h3 className="font-semibold text-white">Strikes and account action</h3>
+                    <p>Confirmed violations may result in content removal and Creator upload suspensions: first strike 7 days, second 14 days, third 30 days, and fourth strike termination of Creator privileges.</p>
+                    <p>Serious violations, deliberate identity fraud, or repeated abuse may result in account termination after review. You will receive notice of an enforcement decision and may appeal it.</p>
+                    <p>Reports or automated detection alone do not establish a violation. Enforcement requires confirmation through the platform&apos;s moderation process.</p>
+                    <p>Read the <a href="/creator-guidelines" target="_blank" rel="noopener noreferrer" className="font-semibold text-cyan-300 underline">full Creator Guidelines</a> for complete policy and appeal information.</p>
+                  </div>
+                  <div className="mt-6 flex justify-end gap-3 border-t border-white/10 pt-4">
+                    <button type="button" onClick={() => setShowCreatorAgreement(false)}
+                      className="rounded-lg border border-white/15 px-4 py-2 text-sm text-slate-300">Close</button>
+                    <button type="button" onClick={() => { setCreatorAgreementAccepted(true); setShowCreatorAgreement(false); }}
+                      className="rounded-lg bg-cyan-400 px-4 py-2 text-sm font-bold text-slate-950 hover:bg-cyan-300">I agree</button>
+                  </div>
+                </section>
+              </div>
             )}
 
             {error && <p role="alert" className="rounded-lg bg-red-500/10 p-3 text-sm text-red-300">{error}</p>}
@@ -187,5 +287,7 @@ export default function SignupPage() {
         </section>
       </div>
     </main>
+      <MemberPageFooter />
+    </>
   );
 }

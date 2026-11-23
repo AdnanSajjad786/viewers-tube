@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { headers } from "next/headers";
 import { randomBytes } from "node:crypto";
 import { auth } from "@/lib/auth";
+import { isEligibleStudioUserById } from "@/lib/creator-access";
 import { prisma } from "@/lib/prisma";
 import { createStreamSecret } from "@/lib/live-stream-auth";
 import { checkRateLimit } from "@/lib/api-protection";
@@ -10,6 +11,7 @@ import { checkRateLimit } from "@/lib/api-protection";
 async function getStudioUser() {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) return null;
+  if (!(await isEligibleStudioUserById(session.user.id))) return null;
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     select: { id: true, role: true },

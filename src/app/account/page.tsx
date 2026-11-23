@@ -1,3 +1,4 @@
+import { MemberPageHeader, MemberPageFooter } from "@/components/member-page-chrome";
 import { Suspense } from "react";
 import Link from "next/link";
 import { headers } from "next/headers";
@@ -12,7 +13,9 @@ import { StorageConnectionForm } from "./storage-connection-form";
 
 export default function AccountPage() {
   return (
-    <main className="min-h-screen bg-[#080b13] px-5 py-12 text-white">
+    <>
+      <MemberPageHeader variant="account" />
+<main className="min-h-screen bg-[#080b13] px-5 py-12 text-white">
       <div className="mx-auto max-w-3xl">
         <Link href="/" className="text-sm text-cyan-300 hover:text-cyan-200">
           ← Viewers Tube home
@@ -22,6 +25,8 @@ export default function AccountPage() {
         </Suspense>
       </div>
     </main>
+      <MemberPageFooter />
+    </>
   );
 }
 
@@ -39,6 +44,9 @@ async function AccountDetails() {
       signupType: true,
       creatorAgreementVersion: true,
       creatorAgreementAcceptedAt: true,
+      creatorApplicationStatus: true,
+      creatorApplicationSubmittedAt: true,
+      creatorApplicationReviewNote: true,
       creatorSuspendedUntil: true,
       creatorTerminatedAt: true,
       channel: {
@@ -108,9 +116,39 @@ async function AccountDetails() {
         </div>
       </div>
 
-      {profile?.role === "VIEWER" && session.user.emailVerified && (
-        <CreatorAccountActions mode="upgrade" strikes={[]} />
+      {profile?.creatorApplicationStatus === "PENDING" && (
+        <section className="mt-7 rounded-xl border border-amber-400/30 bg-amber-400/5 p-5">
+          <h2 className="font-semibold text-amber-200">Creator application pending</h2>
+          <p className="mt-2 text-sm text-slate-300">
+            Your application is awaiting Admin review. Your account remains a Viewer until approval.
+          </p>
+          {profile.creatorApplicationSubmittedAt && (
+            <p className="mt-2 text-xs text-slate-400">
+              Submitted: {profile.creatorApplicationSubmittedAt.toLocaleString()}
+            </p>
+          )}
+        </section>
       )}
+
+      {profile?.creatorApplicationStatus === "REJECTED" && (
+        <section className="mt-7 rounded-xl border border-rose-400/30 bg-rose-400/5 p-5">
+          <h2 className="font-semibold text-rose-200">Creator application not approved</h2>
+          {profile.creatorApplicationReviewNote && (
+            <p className="mt-2 text-sm text-slate-300">
+              Admin note: {profile.creatorApplicationReviewNote}
+            </p>
+          )}
+          <p className="mt-2 text-sm text-slate-300">
+            You may submit a new application after reviewing the feedback.
+          </p>
+        </section>
+      )}
+
+      {profile?.role === "VIEWER" &&
+        profile.creatorApplicationStatus !== "PENDING" &&
+        session.user.emailVerified && (
+          <CreatorAccountActions mode="upgrade" strikes={[]} />
+        )}
 
       {profile?.role === "CREATOR" && !profile.creatorTerminatedAt && (
         <CreatorAccountActions
@@ -124,20 +162,33 @@ async function AccountDetails() {
         />
       )}
 
+      {(profile?.role === "ADMIN" ||
+        profile?.role === "CREATOR" ||
+        (profile?.signupType === "CREATOR" &&
+          profile?.creatorApplicationStatus === "PENDING")) && (
+        <StorageConnectionForm />
+      )}
+
       {(profile?.role === "ADMIN" || profile?.role === "CREATOR") && (
-        <>
-          <StorageConnectionForm />
-          <Link
-            href="/studio"
-            className="mt-7 inline-flex rounded-lg bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-300"
-          >
-            Open Studio · Upload and manage videos →
-          </Link>
-        </>
+        <Link
+          href="/studio"
+          className="mt-7 inline-flex rounded-lg bg-cyan-400 px-5 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-300"
+        >
+          Open Studio · Upload and manage videos →
+        </Link>
       )}
 
       {profile?.role === "ADMIN" && (
-        <section className="mt-7 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-5">
+        <Link
+          href="/admin"
+          className="mt-7 inline-flex rounded-lg border border-emerald-400/40 bg-emerald-400/10 px-5 py-3 text-sm font-bold text-emerald-200 hover:bg-emerald-400/20"
+        >
+          Open Admin Dashboard →
+        </Link>
+      )}
+
+      {profile?.role === "ADMIN" && (
+        <section className="mt-4 rounded-xl border border-emerald-400/30 bg-emerald-400/5 p-5">
           <h2 className="font-semibold text-emerald-300">Platform administrator</h2>
           <p className="mt-2 text-sm text-slate-300">
             Your account has full platform administrator privileges. Admin
@@ -200,7 +251,7 @@ async function AccountDetails() {
                 </p>
 
                 <p className="border-t border-white/10 pt-3 text-slate-400">
-                  Agreement version: VIEWERS_TUBE_CREATOR_2026_01
+                  Agreement version: VIEWERS_TUBE_CREATOR_2026_02
                 </p>
               </div>
             </details>
@@ -211,6 +262,15 @@ async function AccountDetails() {
               initialName={profile.channel.name}
               initialDescription={profile.channel.description || ""}
             />
+          )}
+
+          {profile.creatorTerminatedAt && (
+            <a
+              href="/account/termination-appeal"
+              className="inline-flex rounded-lg border border-red-400/30 bg-red-500/10 px-4 py-3 text-sm font-semibold text-red-200 hover:bg-red-500/20"
+            >
+              Review termination and submit an appeal
+            </a>
           )}
 
           {profile.creatorTerminatedAt ? (

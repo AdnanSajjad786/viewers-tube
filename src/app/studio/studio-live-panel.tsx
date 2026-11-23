@@ -59,7 +59,13 @@ export function StudioLivePanel() {
     }
   }, []);
 
-  useEffect(() => { void load(); }, [load]);
+  useEffect(() => {
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void load();
+    });
+    return () => { active = false; };
+  }, [load]);
 
   function startLocalRecording(streamTitle: string) {
     if (!mediaRef.current) throw new Error("Camera and microphone are unavailable.");
@@ -529,7 +535,7 @@ export function StudioLivePanel() {
       </div>
 
       <p className="text-[11px] leading-relaxed text-slate-500">
-        Browser camera publishing currently targets this laptop's local MediaMTX server. Public internet broadcasting requires a public server address, HTTPS/reverse proxy, firewall configuration and sufficient upload bandwidth.
+        Browser camera publishing currently targets this laptop&apos;s local MediaMTX server. Public internet broadcasting requires a public server address, HTTPS/reverse proxy, firewall configuration and sufficient upload bandwidth.
       </p>
     </div>
   );

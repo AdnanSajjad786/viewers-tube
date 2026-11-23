@@ -1,8 +1,17 @@
 // VIEWERS TUBE — Core platform database
 
 generator client {
-  provider = "prisma-client"
-  output   = "../src/generated/prisma"
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma"
+  engineType = "client"
+  runtime    = "workerd"
+}
+
+generator nodeClient {
+  provider   = "prisma-client"
+  output     = "../src/generated/prisma-node"
+  engineType = "client"
+  runtime    = "nodejs"
 }
 
 datasource db {
@@ -19,6 +28,13 @@ enum UserRole {
 enum AccountType {
   VIEWER
   CREATOR
+}
+
+enum CreatorApplicationStatus {
+  NOT_APPLIED
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 enum VideoStatus {
@@ -38,6 +54,13 @@ enum AppealStatus {
   APPROVED
   REJECTED
   WITHDRAWN
+}
+
+enum CreatorTerminationAppealStatus {
+  NOT_APPEALED
+  OPEN
+  APPROVED
+  REJECTED
 }
 
 enum VideoVisibility {
@@ -66,30 +89,49 @@ enum LiveStreamVisibility {
 }
 
 model User {
-  id                         String              @id @default(cuid())
-  email                      String              @unique
-  username                   String              @unique
-  passwordHash               String?
-  displayName                String
-  emailVerified              Boolean             @default(false)
-  image                      String?
-  role                       UserRole            @default(VIEWER)
-  signupType                 AccountType         @default(VIEWER)
-  creatorAgreementVersion    String?
-  creatorAgreementAcceptedAt DateTime?
-  creatorSuspendedUntil      DateTime?
-  creatorTerminatedAt        DateTime?
-  createdAt                  DateTime            @default(now())
-  updatedAt                  DateTime            @updatedAt
-  channel                    Channel?
-  likes                      VideoLike[]
-  comments                   Comment[]
-  subscriptions              Subscription[]
-  accounts                   Account[]
-  sessions                   Session[]
-  moderationStrikes          ModerationStrike[]  @relation("StrikeOwner")
-  moderationAppeals          ModerationAppeal[]  @relation("AppealAuthor")
-  storageConnections         StorageConnection[]
+  id                             String                   @id @default(cuid())
+  email                          String                   @unique
+  username                       String                   @unique
+  passwordHash                   String?
+  displayName                    String
+  firstName                      String?
+  lastName                       String?
+  dateOfBirth                    String?
+  gender                         String?
+  country                        String?
+  emailVerified                  Boolean                  @default(false)
+  image                          String?
+  role                           UserRole                 @default(VIEWER)
+  signupType                     AccountType              @default(VIEWER)
+  creatorAgreementVersion        String?
+  creatorAgreementAcceptedAt     DateTime?
+  creatorApplicationStatus       CreatorApplicationStatus @default(NOT_APPLIED)
+  creatorApplicationSubmittedAt  DateTime?
+  creatorApplicationReviewedAt   DateTime?
+  creatorApplicationReviewedById String?
+  creatorApplicationReviewNote   String?
+  creatorSuspendedUntil          DateTime?
+  creatorTerminatedAt            DateTime?
+  creatorEmailVerifiedNotifiedAt DateTime?
+  creatorStorageVerifiedNotifiedAt DateTime?
+  createdAt                      DateTime                 @default(now())
+  updatedAt                      DateTime                 @updatedAt
+  channel                        Channel?
+  likes                          VideoLike[]
+  comments                       Comment[]
+  subscriptions                  Subscription[]
+  accounts                       Account[]
+  sessions                       Session[]
+  moderationStrikes              ModerationStrike[]       @relation("StrikeOwner")
+  moderationAppeals              ModerationAppeal[]       @relation("AppealAuthor")
+  creatorTerminations            CreatorTermination[]     @relation("CreatorTerminationOwner")
+  storageConnections             StorageConnection[]
+  promotionAccessRequests        PromotionAccessRequest[] @relation("PromotionApplicant")
+  reviewedPromotionRequests      PromotionAccessRequest[] @relation("PromotionRequestReviewer")
+  promotionCampaigns             PromotionCampaign[]
+  promotionReviews               PromotionReview[]        @relation("PromotionReviewer")
+
+  @@index([creatorApplicationStatus, creatorApplicationSubmittedAt])
 }
 
 model Session {
@@ -110,6 +152,7 @@ model Account {
   id                    String    @id
   accountId             String
   providerId            String
+  issuer                String?
   userId                String
   accessToken           String?
   refreshToken          String?
@@ -148,6 +191,7 @@ model Channel {
   owner       User           @relation(fields: [userId], references: [id])
   videos      Video[]
   liveStreams LiveStream[]
+  podcasts    Podcast[]
   subscribers Subscription[]
 }
 
@@ -169,6 +213,7 @@ model StorageConnection {
   updatedAt               DateTime                @updatedAt
   owner                   User                    @relation(fields: [userId], references: [id], onDelete: Cascade)
   videos                  Video[]
+  podcastEpisodes         PodcastEpisode[]
 
   @@index([status])
   @@index([userId, status])
@@ -303,6 +348,25 @@ model ModerationAppeal {
   @@index([userId, status])
 }
 
+model CreatorTermination {
+  id                 String                         @id @default(cuid())
+  userId             String
+  reason             String
+  evidenceReference  String?
+  status             CreatorTerminationAppealStatus @default(NOT_APPEALED)
+  terminatedAt       DateTime                       @default(now())
+  appealMessage      String?
+  appealedAt         DateTime?
+  reviewedAt         DateTime?
+  reviewerId         String?
+  reviewerNote       String?
+  notificationSentAt DateTime?
+  user               User                           @relation("CreatorTerminationOwner", fields: [userId], references: [id], onDelete: Restrict)
+
+  @@index([userId, terminatedAt])
+  @@index([status, terminatedAt])
+}
+
 enum TranscodeJobStatus {
   PENDING
   RUNNING
@@ -338,21 +402,287 @@ model VideoRendition {
 }
 
 model LiveStream {
-  id            String               @id @default(cuid())
-  channelId     String
-  title         String
-  description   String?
-  streamPath    String               @unique
-  streamKeyHash String
+  id                   String               @id @default(cuid())
+  channelId            String
+  title                String
+  description          String?
+  streamPath           String               @unique
+  streamKeyHash        String
   browserStreamKeyHash String?
-  visibility    LiveStreamVisibility @default(PUBLIC)
-  enabled       Boolean              @default(true)
-  startedAt     DateTime?
-  endedAt       DateTime?
-  createdAt     DateTime             @default(now())
-  updatedAt     DateTime             @updatedAt
-  channel       Channel              @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  visibility           LiveStreamVisibility @default(PUBLIC)
+  enabled              Boolean              @default(true)
+  startedAt            DateTime?
+  endedAt              DateTime?
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  channel              Channel              @relation(fields: [channelId], references: [id], onDelete: Cascade)
 
   @@index([channelId, enabled, createdAt])
   @@index([visibility, enabled])
+}
+
+enum PodcastStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum PodcastVisibility {
+  PUBLIC
+  UNLISTED
+  PRIVATE
+}
+
+enum PodcastEpisodeStatus {
+  UPLOADING
+  READY
+  PUBLISHED
+  FAILED
+}
+
+model Podcast {
+  id          String            @id @default(cuid())
+  channelId   String
+  title       String
+  slug        String            @unique
+  description String?           @db.Text
+  artworkUrl  String?
+  category    String?
+  language    String            @default("en")
+  explicit    Boolean           @default(false)
+  visibility  PodcastVisibility @default(PUBLIC)
+  status      PodcastStatus     @default(DRAFT)
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  channel     Channel           @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  episodes    PodcastEpisode[]
+
+  @@index([channelId, status])
+  @@index([visibility, status])
+}
+
+model PodcastEpisode {
+  id                  String               @id @default(cuid())
+  podcastId           String
+  storageConnectionId String
+  title               String
+  description         String?              @db.Text
+  storageKey          String               @unique
+  contentType         String
+  sizeBytes           BigInt
+  thumbnailUrl        String?
+  durationSeconds     Int?
+  seasonNumber        Int?
+  episodeNumber       Int?
+  status              PodcastEpisodeStatus @default(UPLOADING)
+  publishedAt         DateTime?
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  podcast             Podcast              @relation(fields: [podcastId], references: [id], onDelete: Cascade)
+  storageConnection   StorageConnection    @relation(fields: [storageConnectionId], references: [id], onDelete: Restrict)
+
+  @@index([podcastId, status, publishedAt])
+  @@index([storageConnectionId])
+}
+
+enum PromotionAccessStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+}
+
+enum PromotionCampaignStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  ACTIVE
+  PAUSED
+  REJECTED
+  COMPLETED
+  ARCHIVED
+}
+
+enum PromotionAdStatus {
+  DRAFT
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+  PAUSED
+  ARCHIVED
+}
+
+enum PromotionReviewTargetType {
+  CAMPAIGN
+  AD
+}
+
+enum PromotionReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  FLAGGED
+}
+
+model PromotionAccessRequest {
+  id           String                @id @default(cuid())
+  userId       String
+  status       PromotionAccessStatus @default(PENDING)
+  message      String?               @db.Text
+  reviewerNote String?               @db.Text
+  reviewedById String?
+  reviewedAt   DateTime?
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+  applicant    User                  @relation("PromotionApplicant", fields: [userId], references: [id], onDelete: Cascade)
+  reviewer     User?                 @relation("PromotionRequestReviewer", fields: [reviewedById], references: [id], onDelete: SetNull)
+
+  @@index([userId, status])
+  @@index([status, createdAt])
+}
+
+model PromotionCampaign {
+  id                 String                  @id @default(cuid())
+  ownerId            String
+  title              String
+  description        String?                 @db.Text
+  category           String?
+  tags               String[]                @default([])
+  status             PromotionCampaignStatus @default(DRAFT)
+  startsAt           DateTime?
+  endsAt             DateTime?
+  budgetMinor        Int?
+  currency           String                  @default("PKR")
+  creatorFeeMinor    Int                     @default(0)
+  reviveAdvertiserId Int?                    @unique
+  reviveCampaignId   Int?                    @unique
+  createdAt          DateTime                @default(now())
+  updatedAt          DateTime                @updatedAt
+  owner              User                    @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  ads                PromotionAd[]
+  reviews            PromotionReview[]
+
+  @@index([ownerId, status, createdAt])
+  @@index([status, startsAt, endsAt])
+  @@index([category])
+}
+
+model PromotionAd {
+  id                          String            @id @default(cuid())
+  campaignId                  String
+  title                       String
+  format                      String            @default("IMAGE")
+  creativeUrl                 String?
+  creativeStorageConnectionId String?
+  creativeStorageKey          String?
+  destinationUrl              String?
+  altText                     String?
+  width                       Int?
+  height                      Int?
+  tags                        String[]          @default([])
+  status                      PromotionAdStatus @default(DRAFT)
+  reviveBannerId              Int?              @unique
+  createdAt                   DateTime          @default(now())
+  updatedAt                   DateTime          @updatedAt
+  campaign                    PromotionCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  reviews                     PromotionReview[]
+
+  @@index([campaignId, status])
+}
+
+model PromotionPlacement {
+  id                String   @id @default(cuid())
+  name              String
+  description       String?  @db.Text
+  format            String   @default("BANNER")
+  width             Int?
+  height            Int?
+  enabled           Boolean  @default(false)
+  revivePublisherId Int?
+  reviveZoneId      Int?     @unique
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([enabled])
+}
+
+model PromotionReview {
+  id         String                    @id @default(cuid())
+  targetType PromotionReviewTargetType
+  targetId   String
+  status     PromotionReviewStatus     @default(PENDING)
+  reviewerId String?
+  note       String?                   @db.Text
+  createdAt  DateTime                  @default(now())
+  updatedAt  DateTime                  @updatedAt
+  reviewer   User?                     @relation("PromotionReviewer", fields: [reviewerId], references: [id], onDelete: SetNull)
+  campaign   PromotionCampaign?        @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  ad         PromotionAd?              @relation(fields: [adId], references: [id], onDelete: Cascade)
+  campaignId String?
+  adId       String?
+
+  @@index([targetType, targetId, status])
+  @@index([status, createdAt])
+  @@index([reviewerId])
+}
+
+model PromotionCreativeUpload {
+  id                  String   @id @default(cuid())
+  userId              String
+  storageConnectionId String
+  storageKey          String
+  contentType         String
+  sizeBytes           BigInt
+  status              String   @default("UPLOADING")
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([userId, status])
+  @@index([storageConnectionId, storageKey])
+}
+
+model RepairAuditEvent {
+  id          String   @id @default(cuid())
+  actorUserId String?
+  actorRole   String
+  action      String
+  status      String
+  targetType  String?
+  targetId    String?
+  summary     String
+  createdAt   DateTime @default(now())
+
+  @@index([actorUserId, createdAt])
+  @@index([createdAt])
+  @@index([targetType, targetId])
+}
+
+model WorkerHeartbeat {
+  id         String   @id
+  lastSeenAt DateTime
+  updatedAt  DateTime @updatedAt
+}
+
+model PlatformIncident {
+  id          String    @id @default(cuid())
+  fingerprint String    @unique
+  source      String
+  severity    String    @default("ERROR")
+  status      String    @default("OPEN")
+  title       String
+  detail      String
+  errorCode   String?
+  targetType  String?
+  targetId    String?
+  actorUserId String?
+  occurrences Int       @default(1)
+  firstSeenAt DateTime  @default(now())
+  lastSeenAt  DateTime  @default(now())
+  resolvedAt  DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([status, lastSeenAt])
+  @@index([targetType, targetId])
+  @@index([actorUserId, lastSeenAt])
 }

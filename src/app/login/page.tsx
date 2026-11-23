@@ -1,4 +1,5 @@
 "use client";
+import { MemberPageHeader, MemberPageFooter } from "@/components/member-page-chrome";
 
 import { useState, type FormEvent } from "react";
 import Link from "next/link";
@@ -69,7 +70,9 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="min-h-screen bg-[#080b13] px-5 py-12 text-white">
+    <>
+      <MemberPageHeader variant="auth" />
+<main className="min-h-screen bg-[#080b13] px-5 py-12 text-white">
       <div className="mx-auto max-w-md">
         <Link href="/" className="text-sm text-cyan-300 hover:text-cyan-200">
           ← Viewers Tube
@@ -131,5 +134,7 @@ export default function LoginPage() {
         </section>
       </div>
     </main>
+      <MemberPageFooter />
+    </>
   );
 }

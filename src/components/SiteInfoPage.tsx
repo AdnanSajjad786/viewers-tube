@@ -1,3 +1,4 @@
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 type Props = {
@@ -11,10 +12,10 @@ export default function SiteInfoPage({ title, subtitle, children }: Props) {
     <main className="min-h-screen bg-slate-950 px-5 py-10 text-slate-100">
       <div className="mx-auto max-w-3xl">
         <header className="mb-10 flex flex-wrap items-center justify-between gap-4 border-b border-white/10 pb-5">
-          <a href="/" className="font-bold tracking-wide text-white">
+          <Link href="/" className="font-bold tracking-wide text-white">
             VIEWERS<span className="text-cyan-400">TUBE</span>
-          </a>
-          <a href="/" className="text-sm text-cyan-300 hover:text-cyan-200">← Back to homepage</a>
+          </Link>
+          <Link href="/" className="text-sm text-cyan-300 hover:text-cyan-200">← Back to homepage</Link>
         </header>
         <div className="mb-8">
           <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-cyan-400">Viewers Tube</p>

@@ -3,6 +3,7 @@ import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
+import { isEligibleStudioUser } from "@/lib/creator-access";
 import { StudioDashboard } from "./studio-dashboard";
 
 async function StudioContent() {
@@ -11,10 +12,18 @@ async function StudioContent() {
 
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { role: true, displayName: true },
+    select: {
+      role: true,
+      displayName: true,
+      emailVerified: true,
+      creatorApplicationStatus: true,
+      creatorAgreementAcceptedAt: true,
+      creatorSuspendedUntil: true,
+      creatorTerminatedAt: true,
+    },
   });
 
-  if (!user || !["ADMIN", "CREATOR"].includes(user.role)) redirect("/account");
+  if (!user || !isEligibleStudioUser(user)) redirect("/account");
 
   return <StudioDashboard role={user.role} displayName={user.displayName} />;
 }

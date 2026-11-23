@@ -24,13 +24,25 @@ export function NativeVideoPlayer({ videoId }: { videoId: string }) {
   const frameRef = useRef<number | null>(null);
   const hlsRef = useRef<Hls | null>(null);
 
-  const [url, setUrl] = useState("");
-  const [hlsUrl, setHlsUrl] = useState("");
+  const [playback, setPlayback] = useState<{
+    videoId: string;
+    url: string;
+    hlsUrl: string;
+  } | null>(null);
+  const [playbackError, setPlaybackError] = useState<{
+    videoId: string;
+    message: string;
+  } | null>(null);
+
+  const url = playback?.videoId === videoId ? playback.url : "";
+  const hlsUrl = playback?.videoId === videoId ? playback.hlsUrl : "";
+  const error = playbackError?.videoId === videoId
+    ? playbackError.message
+    : "";
   const [qualityLevels, setQualityLevels] = useState<number[]>([]);
   const [quality, setQuality] = useState("auto");
   const [playbackRate, setPlaybackRate] = useState(1);
   const [theater, setTheater] = useState(false);
-  const [error, setError] = useState("");
   const [audioEnabled, setAudioEnabled] = useState(false);
   const [audioError, setAudioError] = useState("");
   const [bass, setBass] = useState(0);
@@ -43,12 +55,6 @@ export function NativeVideoPlayer({ videoId }: { videoId: string }) {
   useEffect(() => {
     let active = true;
 
-    setUrl("");
-    setHlsUrl("");
-    setQualityLevels([]);
-    setQuality("auto");
-    setError("");
-
     fetch(`/api/videos/${encodeURIComponent(videoId)}/playback`)
       .then(async (response) => {
         const data = await response.json();
@@ -57,12 +63,20 @@ export function NativeVideoPlayer({ videoId }: { videoId: string }) {
       })
       .then((data) => {
         if (active) {
-          setUrl(data.url);
-          setHlsUrl(typeof data.hlsUrl === "string" ? data.hlsUrl : "");
+          setPlayback({
+            videoId,
+            url: data.url,
+            hlsUrl: typeof data.hlsUrl === "string" ? data.hlsUrl : "",
+          });
         }
       })
       .catch((err) => {
-        if (active) setError(err.message || "Could not load video.");
+        if (active) {
+          setPlaybackError({
+            videoId,
+            message: err instanceof Error ? err.message : "Could not load video.",
+          });
+        }
       });
 
     return () => {
@@ -77,7 +91,7 @@ export function NativeVideoPlayer({ videoId }: { videoId: string }) {
     let hls: Hls | null = null;
     let active = true;
 
-    const useMp4Fallback = () => {
+    const fallbackToMp4 = () => {
       if (!active || !video) return;
       hls?.destroy();
       hls = null;
@@ -112,7 +126,7 @@ export function NativeVideoPlayer({ videoId }: { videoId: string }) {
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (data.fatal) {
           console.error("Adaptive playback failed; switching to original video.", data);
-          useMp4Fallback();
+          fallbackToMp4();
         }
       });
 

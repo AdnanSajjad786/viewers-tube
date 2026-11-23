@@ -1,8 +1,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Image from "next/image";
 import { authClient } from "@/lib/auth-client";
 import NativeVideoCarousel from "@/app/components/native-video-carousel";
+import PublicPodcastsSection from "@/app/components/public-podcasts-section";
 
 type Video = {
   id: string;
@@ -25,7 +27,7 @@ function watchHref(v: Video) {
   return `/watch?${params.toString()}`;
 }
 
-const categories = ["For you","Technology","Gaming","Music","Education","Documentary","Travel","Creativity","18+ (TXXX.porn)"];
+const categories = ["For you","Technology","Gaming","Music","Education","Documentary","Travel","Creativity","Bollywood Movies Full","Hollywood Movies Full","18+ (TXXX.porn)"];
 const providers = ["All platforms","YouTube","Vimeo","Dailymotion"];
 const countries = ["Worldwide","USA","UK","France","Japan","Korea"];
 const languages = ["All languages","English","French","Arabic"];
@@ -117,9 +119,36 @@ const profileGroups = [
 ];
 
 
+type SearchSuggestionsProps = {
+  visible: boolean;
+  query: string;
+  suggestions: string[];
+  onChoose: (value: string) => void;
+};
+
+function SearchSuggestions({ visible, query, suggestions, onChoose }: SearchSuggestionsProps) {
+  if (!visible) return null;
+  return (
+    <div className="search-suggestions">
+      <div className="suggestions-heading">
+        {query.trim() ? "SUGGESTED SEARCHES" : "POPULAR SEARCHES"}
+      </div>
+      {suggestions.map((item) => (
+        <button type="button" key={item}
+          onMouseDown={(event) => event.preventDefault()}
+          onClick={() => onChoose(item)}>
+          <span>⌕</span>{item}
+        </button>
+      ))}
+    </div>
+  );
+}
+
 export default function Home() {
   const { data: session, isPending: sessionPending } = authClient.useSession();
-  const [accountRole, setAccountRole] = useState<string | null>(null);
+  const [accountRole, setAccountRole] = useState<{ userId: string; role: string | null } | null>(null);
+  const currentAccountRole =
+    accountRole && accountRole.userId === session?.user?.id ? accountRole.role : null;
   const [nativeVideos, setNativeVideos] = useState<Array<{
     id: string; title: string; creator: string; thumbnail?: string | null;
     description?: string | null; ownerType?: string; provider: string;
@@ -128,27 +157,45 @@ export default function Home() {
 
   useEffect(() => {
     const controller = new AbortController();
-    fetch("/api/videos/library", { cache: "no-store", signal: controller.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error("Library unavailable");
-        return response.json();
-      })
-      .then((data) => setNativeVideos(Array.isArray(data.items) ? data.items : []))
-      .catch((error) => {
-        if (error.name !== "AbortError") console.error("Native library could not load.");
-      })
-      .finally(() => {
+
+    async function loadNativeLibrary() {
+      try {
+        const response = await fetch("/api/videos/library", {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+
+        const data = await response.json().catch(() => null);
+
+        if (!response.ok) {
+          throw new Error(
+            `Native library request failed: HTTP ${response.status}` +
+            (typeof data?.error === "string" ? ` — ${data.error}` : "")
+          );
+        }
+
+        if (!Array.isArray(data?.items)) {
+          throw new Error("Native library response was successful but contained no valid items array.");
+        }
+
+        setNativeVideos(data.items);
+      } catch (error) {
+        if (error instanceof Error && error.name !== "AbortError") {
+          console.error("Native library could not load:", error.message);
+        }
+      } finally {
         if (!controller.signal.aborted) setNativeLoading(false);
-      });
+      }
+    }
+
+    loadNativeLibrary();
     return () => controller.abort();
   }, []);
 
 
   useEffect(() => {
-    if (!session?.user?.id) {
-      setAccountRole(null);
-      return;
-    }
+    const userId = session?.user?.id;
+    if (!userId) return;
 
     const controller = new AbortController();
 
@@ -161,9 +208,10 @@ export default function Home() {
         return response.json();
       })
       .then((data) => {
-        if (["ADMIN", "CREATOR", "VIEWER"].includes(data.role)) {
-          setAccountRole(data.role);
-        }
+        const role = ["ADMIN", "CREATOR", "VIEWER"].includes(data.role)
+          ? data.role
+          : null;
+        setAccountRole({ userId, role });
       })
       .catch((error) => {
         if (error.name !== "AbortError") {
@@ -218,26 +266,6 @@ export default function Home() {
     setShowSearchSuggestions(false);
   }
 
-  function SearchSuggestions() {
-    if (!showSearchSuggestions) return null;
-    return (
-      <div className="search-suggestions">
-        <div className="suggestions-heading">
-          {query.trim() ? "SUGGESTED SEARCHES" : "POPULAR SEARCHES"}
-        </div>
-        {visibleSuggestions.map(item => (
-          <button
-            type="button"
-            key={item}
-            onMouseDown={e => e.preventDefault()}
-            onClick={() => chooseSearchSuggestion(item)}
-          >
-            <span>⌕</span>{item}
-          </button>
-        ))}
-      </div>
-    );
-  }
   const [category, setCategory] = useState("For you");
   const [provider, setProvider] = useState("All platforms");
   const [country, setCountry] = useState("Worldwide");
@@ -318,10 +346,7 @@ export default function Home() {
 
 
   useEffect(() => {
-    if (!translated || videos.length === 0) {
-      setTranslatedTitles({});
-      return;
-    }
+    if (!translated || videos.length === 0) return;
     const controller = new AbortController();
     const targetLanguages: Record<string, string> = {
       English: "en", French: "fr", Arabic: "ar"
@@ -354,7 +379,7 @@ export default function Home() {
     <main className="site-shell">
       <header className="topbar">
         <a className="brand" href="#"><span className="brand-symbol">V</span><span>VIEWERS<span className="brand-accent">TUBE</span><small>WATCH · CREATE · SHARE</small></span></a>
-        <nav className="main-nav"><a className="active" href="#discover">Discover</a><a href="#trending">Trending</a><a href="#creators">Creators</a><a href="/creator-guidelines">Creator Guidelines</a><a href="/studio">Studio</a></nav>
+        <nav className="main-nav"><a className="active" href="#discover">Discover</a><a href="#trending">Trending</a><a href="#creators">Creators</a><a href="/creator-guidelines">Creator Guidelines</a><a href="/studio">Studio</a>{session && (currentAccountRole === "ADMIN" || currentAccountRole === "CREATOR") && <a href="/repair-centre">Repair Centre</a>}</nav>
         <div className="top-actions">
           {sessionPending ? (
             <span className="signin" aria-live="polite">Checking...</span>
@@ -363,9 +388,9 @@ export default function Home() {
               <a className="signin" href="/account">
                 <span className="flex flex-col leading-tight">
                   <span>{session.user.name || "My account"}</span>
-                  {accountRole && (
+                  {currentAccountRole && (
                     <span className="text-[10px] font-bold tracking-wider text-emerald-300">
-                      {accountRole}
+                      {currentAccountRole}
                     </span>
                   )}
                 </span>
@@ -411,7 +436,12 @@ export default function Home() {
               className="quick-search-submit"
               onClick={() => setShowSearchSuggestions(false)}
             >Search ↗</button>
-            <SearchSuggestions />
+            <SearchSuggestions
+              visible={showSearchSuggestions}
+              query={query}
+              suggestions={visibleSuggestions}
+              onChoose={chooseSearchSuggestion}
+            />
           </div>
           <div className="quick-search-hint">
             Search videos across YouTube, Vimeo and Dailymotion
@@ -425,7 +455,7 @@ export default function Home() {
           <div className="eyebrow"><span className="live-dot"/> ONE WORLD. EVERY VIDEO.</div>
           <h1>Every story.<br/>Everywhere.<br/><span>One place.</span></h1>
           <p className="hero-description">Discover videos from around the world. Explore different platforms, languages and cultures through one unified experience.</p>
-          <div className="hero-actions"><a className="join-button large" href="#trending">Explore videos ↗</a><a className="text-link" href="#creators">I'm a creator →</a></div>
+          <div className="hero-actions"><a className="join-button large" href="#trending">Explore videos ↗</a><a className="text-link" href="#creators">I&apos;m a creator →</a></div>
           <div className="hero-proof"><span className="proof-icon">◎</span> Discover content across video platforms</div>
         </div>
         <div className="hero-art">
@@ -460,6 +490,8 @@ export default function Home() {
 
       <NativeVideoCarousel videos={nativeVideos} loading={nativeLoading} />
 
+      <PublicPodcastsSection />
+
       <section className="content-section" id="trending">
         <div className="section-heading"><div><div className="eyebrow">YOUR WORLD OF VIDEO</div><h2>Discover <span>something new.</span></h2></div><span className="result-count">{loading ? "Searching..." : `${videos.length} videos`}</span></div>
 
@@ -480,7 +512,12 @@ export default function Home() {
               placeholder="Search YouTube, Vimeo and Dailymotion videos, creators, topics..."
             />
             {query && <button onClick={() => setQuery("")}>✕</button>}
-            <SearchSuggestions />
+            <SearchSuggestions
+              visible={showSearchSuggestions}
+              query={query}
+              suggestions={visibleSuggestions}
+              onChoose={chooseSearchSuggestion}
+            />
           </div>
           <div className="filter-row">
             <label>PLATFORM<select value={provider} onChange={e=>setProvider(e.target.value)}>{providers.map(x=><option key={x}>{x}</option>)}</select></label>
@@ -499,7 +536,7 @@ export default function Home() {
               <div style={{fontSize:38,marginBottom:12}}>🔞</div>
               <h2 id="adult-title" style={{fontSize:24,marginBottom:12}}>18+ Adult Content</h2>
               <p style={{color:"#c4bfd0",lineHeight:1.6,marginBottom:22}}>This link leads to an external adult website. You must be at least 18 years old, or the age of majority in your location, whichever is higher. Adult content will open on TXXX.porn, not inside Viewers Tube.</p>
-              <a href="https://www.txxx.porn/" target="_blank" rel="noopener noreferrer" className="join-button" onClick={()=>setAdultGateOpen(false)} style={{display:"inline-block",marginBottom:14}}>I confirm I'm 18+ · Continue ↗</a>
+              <a href="https://www.txxx.porn/" target="_blank" rel="noopener noreferrer" className="join-button" onClick={()=>setAdultGateOpen(false)} style={{display:"inline-block",marginBottom:14}}>I confirm I&apos;m 18+ · Continue ↗</a>
               <div><button className="category" onClick={()=>setAdultGateOpen(false)}>Cancel · Go back</button></div>
               <small style={{display:"block",color:"#9992aa",marginTop:18}}>External link only. TXXX search integration is not connected.</small>
             </div>
@@ -510,18 +547,80 @@ export default function Home() {
         {loading && <div className="empty-state"><strong>Finding videos...</strong><p>Searching YouTube for your selection.</p></div>}
 
         {!loading && !error && videos.length > 0 && (
-          <div className="video-grid">
-            {videos.map((v,i)=><article className="video-card" key={v.id}>
-              <a href={watchHref(v)} className={`video-art art-${["one","two","three","four","five","six","seven","eight"][i%8]}`} style={{display:"block",position:"relative"}}>
-                {v.thumbnail && <img src={v.thumbnail} alt={v.title} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}}/>}
-                <span className="video-tag" style={{zIndex:1}}>{v.provider}</span><span className="art-number" style={{zIndex:1}}>0{i+1}</span><span className="art-play" style={{zIndex:1}}>▶</span>
-              </a>
-              <div className="video-info"><div className="creator-avatar">{v.creator.charAt(0)}</div><div className="video-text"><h3><a href={watchHref(v)}>{translatedTitles[v.id] || v.title}</a></h3><p>{v.creator}</p><small>{v.provider} · {v.published ? new Date(v.published).toLocaleDateString() : "Video"} · <a href={v.url} target="_blank" rel="noopener noreferrer">Original ↗</a></small></div></div>
-            </article>)}
+          <div className="provider-sections">
+            {(provider === "All platforms" ? providers.slice(1) : [provider]).map(platform => {
+              const platformVideos = videos.filter(v => v.provider === platform);
+              if (!platformVideos.length) return null;
+
+              const logo = platform === "YouTube"
+                ? "https://cdn.simpleicons.org/youtube/FF0033"
+                : platform === "Vimeo"
+                  ? "https://cdn.simpleicons.org/vimeo/1AB7EA"
+                  : "https://cdn.simpleicons.org/dailymotion/FFFFFF";
+
+              return (
+                <section className={`provider-section provider-section-${platform.toLowerCase()}`} key={platform}>
+                  <div className="provider-section-heading">
+                    <div className="provider-section-brand">
+                      <Image src={logo} alt={`${platform} logo`} width={30} height={30} unoptimized />
+                      <div>
+                        <h3>{platform}</h3>
+                        <p>Discover videos on {platform}</p>
+                      </div>
+                    </div>
+                    <span className="provider-section-count">{platformVideos.length} videos</span>
+                  </div>
+                  <div className="video-grid">
+                    {platformVideos.map((v, i) => (
+                      <article className="video-card" key={`${v.provider}-${v.id}`}>
+                        <a href={watchHref(v)} className={`video-art art-${["one","two","three","four","five","six","seven","eight"][i%8]}`} style={{display:"block",position:"relative"}}>
+                          {v.thumbnail && <Image src={v.thumbnail} alt={v.title} fill sizes="(max-width: 650px) 100vw, 25vw" unoptimized style={{objectFit:"cover"}}/>}
+                          <span className={`video-tag provider-tag provider-${v.provider.toLowerCase()}`} style={{zIndex:1}}>{v.provider}</span>
+                          <span className="art-number" style={{zIndex:1}}>0{i+1}</span>
+                          <span className="art-play" style={{zIndex:1}}>▶</span>
+                        </a>
+                        <div className="video-info">
+                          <div className="creator-avatar">{v.creator.charAt(0)}</div>
+                          <div className="video-text">
+                            <h3><a href={watchHref(v)}>{translated ? translatedTitles[v.id] || v.title : v.title}</a></h3>
+                            <p>{v.creator}</p>
+                            <small>{v.published ? new Date(v.published).toLocaleDateString() : "Video"} · <a href={v.url} target="_blank" rel="noopener noreferrer">Original ↗</a></small>
+                          </div>
+                        </div>
+                      </article>
+                    ))}
+                  </div>
+                </section>
+              );
+            })}
           </div>
         )}
 
-        {!loading && !error && videos.length===0 && <div className="empty-state"><strong>No videos found</strong><p>Try another search or change your filters.</p><button className="join-button" onClick={()=>{setQuery("");setCategory("For you");setProvider("All platforms");setCountry("Worldwide");setLanguage("All languages")}}>Clear filters ↗</button></div>}
+        {!loading && !error && videos.length === 0 && (
+          <div className="empty-state">
+            <strong>
+              {category === "Bollywood Movies Full" || category === "Hollywood Movies Full"
+                ? "No approved official movies found"
+                : "No videos found"}
+            </strong>
+            <p>
+              {category === "Bollywood Movies Full" || category === "Hollywood Movies Full"
+                ? "Only videos from verified official studio or distributor sources are shown in this category. Try again later or adjust your search."
+                : "Try another search or change your filters."}
+            </p>
+            <button
+              className="join-button"
+              onClick={() => {
+                setQuery("");
+                setProvider("All platforms");
+                setCountry("Worldwide");
+                setLanguage("All languages");
+              }}
+            >
+              Clear filters ↗
+            </button>
+          </div>
+        )}
 
 
       </section>
@@ -537,7 +636,7 @@ export default function Home() {
 
         {myChannel && (
           <div style={{display:"flex",alignItems:"center",gap:14,margin:"24px 0 28px"}}>
-            {myChannel.thumbnail && <img src={myChannel.thumbnail} alt={myChannel.title} style={{width:54,height:54,borderRadius:"50%",objectFit:"cover"}} />}
+            {myChannel.thumbnail && <Image src={myChannel.thumbnail} alt={myChannel.title} width={54} height={54} unoptimized style={{width:54,height:54,borderRadius:"50%",objectFit:"cover"}} />}
             <div>
               <strong style={{fontSize:15}}>{myChannel.title}</strong>
               <p style={{fontSize:11,color:"#9998ab",margin:"5px 0 0"}}>Official YouTube channel · Latest uploads</p>
@@ -552,7 +651,7 @@ export default function Home() {
           <div className="video-grid">
             {myVideos.map((v,i)=><article className="video-card" key={v.id}>
               <a href={watchHref(v)} className={`video-art art-${["one","two","three","four","five","six","seven","eight"][i%8]}`} style={{display:"block",position:"relative"}}>
-                {v.thumbnail && <img src={v.thumbnail} alt={v.title} style={{width:"100%",height:"100%",objectFit:"cover",position:"absolute",inset:0}} />}
+                {v.thumbnail && <Image src={v.thumbnail} alt={v.title} fill sizes="(max-width: 650px) 100vw, 25vw" unoptimized style={{objectFit:"cover"}} />}
                 <span className="video-tag" style={{zIndex:1}}>YouTube</span>
                 <span className="art-number" style={{zIndex:1}}>{String(i+1).padStart(2,"0")}</span>
                 <span className="art-play" style={{zIndex:1}}>▶</span>
@@ -634,21 +733,21 @@ export default function Home() {
         <div className="profile-feature profile-feature-orbit">
         <div className="profile-orbit-stage">
           <div className="orbit-ring orbit-ring-one">
-            <a className="orbit-icon" href="https://www.linkedin.com/in/adnan-sajjad-b48567262/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"><img src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="LinkedIn" /></a>
-            <a className="orbit-icon" href="https://github.com/AdnanSajjad786" target="_blank" rel="noopener noreferrer" aria-label="GitHub"><img src="https://cdn.simpleicons.org/github/FFFFFF" alt="GitHub" /></a>
-            <a className="orbit-icon" href="https://www.facebook.com/profile.php?id=61580769429465" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><img src="https://cdn.simpleicons.org/facebook/0866FF" alt="Facebook" /></a>
-            <a className="orbit-icon" href="https://www.instagram.com/adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><img src="https://cdn.simpleicons.org/instagram/E4405F" alt="Instagram" /></a>
-            <a className="orbit-icon" href="https://www.youtube.com/@adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="YouTube"><img src="https://cdn.simpleicons.org/youtube/FF0033" alt="YouTube" /></a>
-            <a className="orbit-icon" href="https://www.tiktok.com/@adnan.sajjad.addy" target="_blank" rel="noopener noreferrer" aria-label="TikTok"><img src="https://cdn.simpleicons.org/tiktok/FFFFFF" alt="TikTok" /></a>
-            <a className="orbit-icon" href="https://x.com/AdnanSajjadnew" target="_blank" rel="noopener noreferrer" aria-label="X"><img src="https://cdn.simpleicons.org/x/FFFFFF" alt="X" /></a>
-            <a className="orbit-icon" href="https://www.pinterest.com/adnansajjadnew786" target="_blank" rel="noopener noreferrer" aria-label="Pinterest"><img src="https://cdn.simpleicons.org/pinterest/E60023" alt="Pinterest" /></a>
-            <a className="orbit-icon" href="https://www.snapchat.com/add/adnansajjadkhi" target="_blank" rel="noopener noreferrer" aria-label="Snapchat"><img src="https://cdn.simpleicons.org/snapchat/FFFC00" alt="Snapchat" /></a>
-            <a className="orbit-icon" href="https://www.twitch.tv/adnansajjad" target="_blank" rel="noopener noreferrer" aria-label="Twitch"><img src="https://cdn.simpleicons.org/twitch/9146FF" alt="Twitch" /></a>
-            <a className="orbit-icon" href="https://www.dailymotion.com/user/adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="Dailymotion"><img src="https://cdn.simpleicons.org/dailymotion/FFFFFF" alt="Dailymotion" /></a>
-            <a className="orbit-icon" href="https://www.threads.com/@adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="Threads"><img src="https://cdn.simpleicons.org/threads/FFFFFF" alt="Threads" /></a>
+            <a className="orbit-icon" href="https://www.linkedin.com/in/adnan-sajjad-b48567262/" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn"><Image src="https://cdn.simpleicons.org/linkedin/0A66C2" alt="LinkedIn" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://github.com/AdnanSajjad786" target="_blank" rel="noopener noreferrer" aria-label="GitHub"><Image src="https://cdn.simpleicons.org/github/FFFFFF" alt="GitHub" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.facebook.com/profile.php?id=61580769429465" target="_blank" rel="noopener noreferrer" aria-label="Facebook"><Image src="https://cdn.simpleicons.org/facebook/0866FF" alt="Facebook" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.instagram.com/adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="Instagram"><Image src="https://cdn.simpleicons.org/instagram/E4405F" alt="Instagram" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.youtube.com/@adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="YouTube"><Image src="https://cdn.simpleicons.org/youtube/FF0033" alt="YouTube" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.tiktok.com/@adnan.sajjad.addy" target="_blank" rel="noopener noreferrer" aria-label="TikTok"><Image src="https://cdn.simpleicons.org/tiktok/FFFFFF" alt="TikTok" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://x.com/AdnanSajjadnew" target="_blank" rel="noopener noreferrer" aria-label="X"><Image src="https://cdn.simpleicons.org/x/FFFFFF" alt="X" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.pinterest.com/adnansajjadnew786" target="_blank" rel="noopener noreferrer" aria-label="Pinterest"><Image src="https://cdn.simpleicons.org/pinterest/E60023" alt="Pinterest" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.snapchat.com/add/adnansajjadkhi" target="_blank" rel="noopener noreferrer" aria-label="Snapchat"><Image src="https://cdn.simpleicons.org/snapchat/FFFC00" alt="Snapchat" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.twitch.tv/adnansajjad" target="_blank" rel="noopener noreferrer" aria-label="Twitch"><Image src="https://cdn.simpleicons.org/twitch/9146FF" alt="Twitch" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.dailymotion.com/user/adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="Dailymotion"><Image src="https://cdn.simpleicons.org/dailymotion/FFFFFF" alt="Dailymotion" width={25} height={25} unoptimized /></a>
+            <a className="orbit-icon" href="https://www.threads.com/@adnansajjad786" target="_blank" rel="noopener noreferrer" aria-label="Threads"><Image src="https://cdn.simpleicons.org/threads/FFFFFF" alt="Threads" width={25} height={25} unoptimized /></a>
           </div>
           <div className="profile-center-photo">
-            <img src="/images/adnan-sajjad.png" alt="Adnan Sajjad" />
+            <Image src="/images/adnan-sajjad.png" alt="Adnan Sajjad" width={190} height={190} priority style={{width:"100%",height:"100%",objectFit:"cover",objectPosition:"center 25%",borderRadius:"50%"}} />
           </div>
           <div className="orbit-center-label">ADNAN<br/>SAJJAD</div>
         </div>
